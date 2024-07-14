@@ -1,3 +1,7 @@
 QFrame#Entry {
     border: 1px solid white;
 }
+
+QPushButton#EntryExpandButton {
+    text-align: right;
+}

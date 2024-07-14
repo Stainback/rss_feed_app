@@ -7,9 +7,9 @@ from feed import Feed
 
 
 urls = [
-    #"https://dou.ua/feed/",
+    "https://dou.ua/feed/",
     "https://www.nasa.gov/aeronautics/feed/",
-    #"https://kotaku.com/rss"
+    "https://kotaku.com/rss"
 ]
 
 if __name__ == "__main__":
