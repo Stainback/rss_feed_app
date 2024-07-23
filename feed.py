@@ -1,19 +1,11 @@
 import feedparser
-from html.parser import HTMLParser
 
 
-class EntryParser(HTMLParser):
+class EntryHandler:
     def __init__(self, data):
-        HTMLParser.__init__(self)
-
         self.title = data.title
-        self.description = ""
+        self.description = data.description
         self.link = data.link
-
-        self.feed(data.description)
-
-    def handle_data(self, data):
-        self.description += data.strip("\n")
 
 
 class Feed:
@@ -21,5 +13,5 @@ class Feed:
         self.url = url
         self.feed = feedparser.parse(self.url)
 
-    def __getitem__(self, index: int) -> EntryParser:
-        return EntryParser(self.feed['entries'][index])
+    def __getitem__(self, index: int) -> EntryHandler:
+        return EntryHandler(self.feed['entries'][index])
