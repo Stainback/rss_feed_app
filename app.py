@@ -1,12 +1,26 @@
-from PyQt6.QtCore import Qt, QSize, QUrl
-from PyQt6.QtGui import QAction, QDesktopServices
-from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QFrame, QScrollArea, QToolBar, QLabel, QPushButton
-from feed import Feed, EntryParser
+import webbrowser
+
+from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtGui import QAction
+from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QFrame, \
+    QScrollArea, QToolBar, QLabel, QPushButton, QHBoxLayout, QLineEdit, \
+    QDialog, QDialogButtonBox
+
+from feed import Feed, EntryHandler
+from db import DBManager
 
 
 class App(QMainWindow):
-    def __init__(self, feeds: list[Feed], width: int = 520, height: int = 1040):
+    def __init__(
+            self,
+            feeds: list[Feed],
+            db: DBManager,
+            width: int = 520,
+            height: int = 1040
+    ):
         super().__init__()
+
+        self.db = db
 
         self.setWindowTitle("RSS Feed")
         self.setFixedSize(QSize(width, height))
@@ -21,11 +35,16 @@ class App(QMainWindow):
         self.toolbar = ActionsWidget()
         self.toolbar.action_add.triggered.connect(self.add_rss)
         self.toolbar.action_refresh.triggered.connect(self.content.refresh)
-        #self.toolbar.action_settings.triggered.connect(settings)
         self.addToolBar(self.toolbar)
 
     def add_rss(self):
-        print("Calling 'add_rss' function")
+        # create a form
+        self.dialog = UrlDialog()
+        self.dialog.exec()
+        # read url and check its validity
+        # pass to db.create_feed
+        # refresh active folder
+        raise NotImplemented("Calling 'add_rss' function")
 
 
 class ActionsWidget(QToolBar):
@@ -38,37 +57,60 @@ class ActionsWidget(QToolBar):
         self.action_refresh = QAction("Refresh", self)
         self.addAction(self.action_refresh)
 
-        self.action_settings = QAction("Settings", self)
-        self.addAction(self.action_settings)
+
+class UrlDialog(QDialog):
+    def __init__(self):
+        super().__init__()
+
+        self.setWindowTitle("Insert feed URL")
+
+        self.layout = QVBoxLayout()
+        self.setLayout(self.layout)
+
+        self.url_box = QLineEdit()
+        self.layout.addWidget(self.url_box)
+
+        QBtn = QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        self.button_box = QDialogButtonBox(QBtn)
+        self.layout.addWidget(self.button_box)
 
 
 class ContentWidget(QScrollArea):
     def __init__(self, feeds: list[Feed]):
         super().__init__()
 
+        self.feeds = feeds
+
         self.layout = QVBoxLayout()
         self.widget = QWidget()
 
-        for feed in feeds:
+        for feed in self.feeds:
             for entry in feed:
                 self.layout.addWidget(EntryFrame(entry))
 
         self.widget.setLayout(self.layout)
 
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOn
+        )
+        self.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
         self.setWidgetResizable(True)
         self.setWidget(self.widget)
 
     def refresh(self):
-        print("Calling 'refresh' function")
+        # get feeds of active folder from db
+        # check for updates
+        # update active folder if needed
+        raise NotImplemented("Calling 'refresh' function")
 
 
 class EntryFrame(QFrame):
-    def __init__(self, entry: EntryParser = None):
+    def __init__(self, entry: EntryHandler = None):
         super().__init__()
 
-        self.url = QUrl(entry.link)
+        self.url = entry.link
 
         self.setObjectName("Entry")
 
@@ -76,7 +118,7 @@ class EntryFrame(QFrame):
         self.setLayout(self.layout)
 
         self.title_label = QLabel()
-        self.title_label.setText(entry.title if entry else "No Entry")
+        self.title_label.setText(entry.title if entry else "No Title")
         self.title_label.setWordWrap(True)
         self.layout.addWidget(self.title_label)
 
@@ -105,6 +147,5 @@ class EntryFrame(QFrame):
         self.expand_flag = not self.expand_flag
 
     def open_link(self):
-        #print("Opening link")
-        QDesktopServices.openUrl(self.url)
-
+        wb = webbrowser.get()
+        wb.open_new_tab(self.url)
