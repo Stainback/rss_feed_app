@@ -30,7 +30,7 @@ class DBManager:
                     INSERT INTO feeds (url) 
                     VALUES (?)
                 """,
-                (url, url)
+                (url,)
             )
             self.conn.commit()
 

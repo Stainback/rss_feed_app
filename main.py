@@ -15,7 +15,6 @@ if __name__ == "__main__":
 
     with DBManager() as db:
         window = App(
-            feeds=db.retrieve_all_feeds(),
             db=db,
             height=app.primaryScreen().availableSize().height()
         )
