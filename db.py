@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from validators import url as url_validator
 
 from feed import Feed
 
@@ -22,9 +23,14 @@ class DBManager:
     def configure_db(self):
         pass
 
-    def create_feed(self, url: str) -> int:
-        feed = self.find_feed(url)
-        if not feed:
+    def create_feed(self, url: str) -> None:
+        if not isinstance(url, str):
+            raise TypeError("URL must be a string.")
+        elif not url_validator(url):
+            raise ValueError("URL is not valid.")
+        elif self.find_feed(url):
+            raise ValueError("This URL already exists in database.")
+        else:
             self.cursor.execute(
                 """
                     INSERT INTO feeds (url) 
@@ -34,15 +40,16 @@ class DBManager:
             )
             self.conn.commit()
 
-            return self.cursor.execute(
-                "SELECT CAST(last_insert_rowid() AS int)"
-            ).fetchone()[0]
+    def create_folder(self, name: str) -> None:
+        if not isinstance(name, str):
+            raise TypeError("Name must be a string.")
+        elif name.strip() == "":
+            raise ValueError("Name must not be empty.")
+        elif self.find_folder(name):
+            raise ValueError(
+                "Folder with this name already exists in database"
+            )
         else:
-            return feed
-
-    def create_folder(self, name: str) -> int:
-        folder = self.find_folder(name)
-        if not folder:
             self.cursor.execute(
                 """
                     INSERT INTO folders (name) 
@@ -52,25 +59,25 @@ class DBManager:
             )
             self.conn.commit()
 
-            return self.cursor.execute(
-                "SELECT CAST(last_insert_rowid() AS int)"
-            ).fetchone()[0]
-        else:
-            return folder
-
     def find_feed(self, url: str) -> int:
-        query = self.conn.execute(
-            "SELECT pk FROM feeds WHERE url = ?",
-            (url, )
-        ).fetchone()
-        return query[0] if query else None
+        if not isinstance(url, str):
+            raise TypeError("URL must be a string.")
+        else:
+            query = self.conn.execute(
+                "SELECT pk FROM feeds WHERE url = ?",
+                (url, )
+            ).fetchone()
+            return query[0] if query else None
 
     def find_folder(self, name: str) -> int:
-        query = self.conn.execute(
-            "SELECT pk FROM folders WHERE name = ?",
-            (name, )
-        ).fetchone()
-        return query(0) if query else None
+        if not isinstance(name, str):
+            raise TypeError("Name must be a string.")
+        else:
+            query = self.conn.execute(
+                "SELECT pk FROM folders WHERE name = ?",
+                (name, )
+            ).fetchone()
+            return query(0) if query else None
 
     def retrieve_all_feeds(self) -> list[Feed]:
         return [
@@ -89,17 +96,24 @@ class DBManager:
         ]
 
     def retrieve_folder(self, folder: str) -> list[Feed]:
-        urls_rows = self.conn.execute(
-            """
-                SELECT url 
-                FROM main.feeds_folders ff
-                LEFT JOIN main.feeds f 
-                ON ff.feed_fk = f.pk
-                WHERE folder_fk = ?
-            """,
-            (folder, )
-        ).fetchall()
-        return [Feed(row["url"]) for row in urls_rows]
+        if not isinstance(folder, str):
+            raise TypeError("Folder name must be a string.")
+        elif not self.find_folder(folder):
+            raise ValueError(
+                "Folder with this name does not exist in database."
+            )
+        else:
+            urls_rows = self.conn.execute(
+                """
+                    SELECT url 
+                    FROM main.feeds_folders ff
+                    LEFT JOIN main.feeds f 
+                    ON ff.feed_fk = f.pk
+                    WHERE folder_fk = ?
+                """,
+                (folder, )
+            ).fetchall()
+            return [Feed(row["url"]) for row in urls_rows]
 
     def add_to_folder(self, url: str, folder: str) -> None:
         self.cursor.execute(
@@ -112,7 +126,13 @@ class DBManager:
         self.conn.commit()
 
     def delete_feed(self, url: str) -> None:
+        if not isinstance(url, str):
+            raise TypeError("URL must be a string.")
+
         feed_pk = self.find_feed(url)
+        if feed_pk is None:
+            raise ValueError("URL is not found in the database.")
+
         self.cursor.execute(
             """
                 DELETE FROM feeds  
@@ -132,7 +152,12 @@ class DBManager:
         self.conn.commit()
 
     def delete_folder(self, folder: str) -> None:
+        if not isinstance(folder, str):
+            raise TypeError("Folder name must be a string.")
+
         folder_pk = self.find_folder(folder)
+        if folder_pk is None:
+            raise ValueError("Folder is not found in the database.")
 
         self.cursor.execute(
             """

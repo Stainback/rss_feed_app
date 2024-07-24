@@ -40,10 +40,11 @@ class App(QMainWindow):
         self.dialog.submitted_url.connect(self.add_rss)
 
     def add_rss(self, url: str):
-        # read url and check its validity
-        if url != "":
+        try:
             self.db.create_feed(url)
             self.refresh()
+        except ValueError as err:
+            print(f"Error: {err}")
 
     def refresh(self):
         # get feeds of active folder from db
