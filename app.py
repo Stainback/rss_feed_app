@@ -156,8 +156,8 @@ class UrlDialog(QDialog):
         self.layout.addWidget(self.button_box)
 
     def accept(self):
-        self.url_box.clear()
         self.submitted_url.emit(self.url_box.text())
+        self.url_box.clear()
         super().accept()
 
 
