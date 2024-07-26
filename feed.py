@@ -1,7 +1,12 @@
 import feedparser
+from feedparser import sanitizer
 
 from datetime import datetime
 from time import mktime
+
+
+for tag in ("a", "img"):
+    sanitizer._HTMLSanitizer.acceptable_elements.remove(tag)
 
 
 class Entry:

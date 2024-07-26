@@ -169,7 +169,7 @@ class ContentWidget(QScrollArea):
         self.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
-
+        self.parent = parent
         self.layout = QVBoxLayout()
 
         self.widget = QWidget()
