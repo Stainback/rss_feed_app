@@ -1,33 +1,69 @@
+import sys
 import webbrowser
 
-from PyQt6.QtCore import Qt, QSize, pyqtSignal
-from PyQt6.QtGui import QAction
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QTimer
+from PyQt6.QtGui import QAction, QFont, QFontDatabase, QPalette
 from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QFrame, \
     QScrollArea, QToolBar, QLabel, QPushButton, QHBoxLayout, QLineEdit, \
-    QDialog, QDialogButtonBox
+    QDialog, QDialogButtonBox, QApplication, QToolButton, QTabWidget
 
-from feed import Feed
+from feed import Feed, Entry
 from db import DBManager
 
 
-class App(QMainWindow):
+class App(QApplication):
+    TIMER_REFRESH = 60  # in seconds
+
+    def __init__(self):
+        super().__init__(sys.argv)
+
+        QFontDatabase.addApplicationFont("fonts/UbuntuMono-Regular.ttf")
+        default_font = QFont("Ubuntu Mono")
+        default_font.setPixelSize(16)
+        self.setFont(default_font)
+
+        with open("css/styles.css", "r") as styles_file:
+            self.setStyleSheet(styles_file.read())
+
+        with DBManager() as db:
+            self.window = AppWindow(
+                db=db,
+                width=self.primaryScreen().availableSize().width() * 0.25,
+                height=self.primaryScreen().availableSize().height() * 0.97
+            )
+
+            self.window.show()
+
+            timer = QTimer(self)
+            timer.timeout.connect(self.window.refresh)
+            timer.start(self.TIMER_REFRESH * 1000)
+
+            self.exec()
+
+
+class AppWindow(QMainWindow):
     def __init__(
             self,
             db: DBManager,
-            width: int = 520,
-            height: int = 1040
+            width: int,
+            height: int
     ):
         super().__init__()
 
         self.db = db
+        self.feeds = [Feed(url) for url in self.db.retrieve_all_feeds()]
 
         self.setWindowTitle("RSS Feed")
         self.setFixedSize(QSize(width, height))
+        # self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
 
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
 
-        self.content = ContentWidget(self.db.retrieve_all_feeds())
+        # self.title_bar = TitleBar(self)
+        # self.layout.addWidget(self.title_bar)
+
+        self.content = ContentWidget(self.feeds, self)
         self.layout.addWidget(self.content)
         self.setCentralWidget(self.content)
 
@@ -47,10 +83,51 @@ class App(QMainWindow):
             print(f"Error: {err}")
 
     def refresh(self):
-        # get feeds of active folder from db
-        # check for updates
-        # update active folder if needed
-        self.content.update_content(self.db.retrieve_all_feeds())
+        urls = self.db.retrieve_all_feeds()
+        existing = [feed.url for feed in self.feeds]
+        feeds = []
+
+        for url in urls:
+            if url in existing:
+                _ = self.feeds[existing.index(url)]
+                _.refresh()
+                feeds.append(_)
+            else:
+                feeds.append(Feed(url))
+
+        self.feeds = [feed for feed in feeds]
+
+        self.content.update_content(self.feeds)
+
+
+class TitleBar(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setAutoFillBackground(True)
+        self.setBackgroundRole(QPalette.ColorRole.Highlight)
+        self.initial_pos = None
+
+        self.layout = QHBoxLayout()
+        self.setLayout(self.layout)
+
+        self.title = QLabel(f"{self.__class__.__name__}", self)
+        self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        if title := parent.windowTitle():
+            self.title.setText(title)
+        self.layout.addWidget(self.title)
+
+        self.min_button = QToolButton(self)
+        self.min_button.clicked.connect(self.window().showMinimized)
+
+        self.close_button = QToolButton(self)
+        self.close_button.clicked.connect(self.window().close)
+
+        for button in (self.min_button, self.close_button):
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            button.setFixedSize(QSize(28, 28))
+            button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+            self.layout.addWidget(button)
 
 
 class ActionsWidget(QToolBar):
@@ -62,6 +139,17 @@ class ActionsWidget(QToolBar):
 
         self.action_refresh = QAction("Refresh", self)
         self.addAction(self.action_refresh)
+
+
+class FoldersBar(QTabWidget):
+    def __init__(self, folders: list[str]):
+        super().__init__()
+
+        self.setTabBarAutoHide(True)
+        self.setUsesScrollButtons(True)
+
+        self.layout = QHBoxLayout()
+        self.setLayout(self.layout)
 
 
 class UrlDialog(QDialog):
@@ -87,17 +175,20 @@ class UrlDialog(QDialog):
         self.layout.addWidget(self.button_box)
 
     def accept(self):
+        self.url_box.clear()
         self.submitted_url.emit(self.url_box.text())
         super().accept()
 
 
 class ContentWidget(QScrollArea):
-    def __init__(self, feeds: list[Feed]):
-        super().__init__()
+    def __init__(self, feeds: list[Feed], parent=None):
+        super().__init__(parent)
+        self.setObjectName("ContentWidget")
 
         self.layout = QVBoxLayout()
-        self.widget = QWidget()
 
+        self.widget = QWidget()
+        self.widget.setObjectName("ContentWidget")
         self.widget.setLayout(self.layout)
 
         self.content = []
@@ -113,22 +204,27 @@ class ContentWidget(QScrollArea):
         self.setWidget(self.widget)
 
     def update_content(self, feeds: list[Feed]):
+        for widget in self.content:
+            self.layout.removeWidget(widget)
+
         for feed in feeds:
-            for entry in feed:
-                entry_widget = EntryFrame(entry)
-                if entry_widget.id not in map(
+            for entry in feed.entries:
+                if entry.id not in map(
                         lambda item: item.id, self.content
                 ):
-                    self.content.append(entry_widget)
-                    self.layout.addWidget(entry_widget)
+                    entry_widget = EntryFrame(entry, self)
+                    self.content.insert(0, entry_widget)
+
+        for widget in self.content:
+            self.layout.addWidget(widget)
 
 
 class EntryFrame(QFrame):
-    def __init__(self, entry=None):
-        super().__init__()
+    def __init__(self, entry: Entry = None, parent=None):
+        super().__init__(parent)
 
-        self.id = hash(entry.title + entry.published)
-        self.url = entry.link
+        self.entry = entry
+        self.id = entry.id
 
         self.setObjectName("Entry")
 
@@ -136,7 +232,9 @@ class EntryFrame(QFrame):
         self.setLayout(self.layout)
 
         self.title_label = QLabel()
-        self.title_label.setText(entry.title if entry else "No Title")
+        self.title_label.setText(
+            str(entry) if entry else "No Title"
+        )
         self.title_label.setWordWrap(True)
         self.layout.addWidget(self.title_label)
 
@@ -148,19 +246,21 @@ class EntryFrame(QFrame):
 
         self.link_button = QPushButton()
         self.link_button.setObjectName("EntryLinkButton")
+        self.link_button.setFlat(True)
         self.link_button.setText("Read it")
         self.button_layout.addWidget(self.link_button)
         self.link_button.clicked.connect(self.open_link)
 
         self.expand_button = QPushButton("Expand")
         self.expand_button.setObjectName("EntryExpandButton")
+        self.expand_button.setFlat(True)
         self.button_layout.addWidget(self.expand_button)
         self.expand_button.clicked.connect(self.change_description_state)
 
         self.description_label = QLabel()
+        self.description_label.setObjectName("EntryDescriptionLabel")
         self.description_label.setText(
-            " ".join(entry.description.split()[:150])
-            if entry else "No Description"
+            self.entry.description if entry else "No Description"
         )
         self.description_label.setWordWrap(True)
         self.expand_flag = False
@@ -175,4 +275,4 @@ class EntryFrame(QFrame):
 
     def open_link(self):
         wb = webbrowser.get()
-        wb.open_new_tab(self.url)
+        wb.open_new_tab(self.entry.url)
