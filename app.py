@@ -7,8 +7,8 @@ from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QWidget, QFrame, \
     QScrollArea, QToolBar, QLabel, QPushButton, QHBoxLayout, QLineEdit, \
     QDialog, QDialogButtonBox, QApplication, QToolButton, QTabWidget
 
-from feed import Feed, Entry
-from db import DBManager
+from feed import Entry
+from manager import AppManager
 
 
 class App(QApplication):
@@ -25,45 +25,42 @@ class App(QApplication):
         with open("css/styles.css", "r") as styles_file:
             self.setStyleSheet(styles_file.read())
 
-        with DBManager() as db:
-            self.window = AppWindow(
-                db=db,
-                width=self.primaryScreen().availableSize().width() * 0.25,
-                height=self.primaryScreen().availableSize().height() * 0.97
-            )
+        self.manager = AppManager()
 
-            self.window.show()
+        self.window = AppWindow(
+            app=self,
+            width=self.primaryScreen().availableSize().width() * 0.25,
+            height=self.primaryScreen().availableSize().height() * 0.97
+        )
 
-            timer = QTimer(self)
-            timer.timeout.connect(self.window.refresh)
-            timer.start(self.TIMER_REFRESH * 1000)
+        self.window.show()
 
-            self.exec()
+        timer = QTimer(self)
+        timer.timeout.connect(self.window.refresh)
+        timer.start(self.TIMER_REFRESH * 1000)
+
+        self.exec()
 
 
 class AppWindow(QMainWindow):
     def __init__(
             self,
-            db: DBManager,
+            app: App,
             width: int,
             height: int
     ):
         super().__init__()
 
-        self.db = db
-        self.feeds = [Feed(url) for url in self.db.retrieve_all_feeds()]
+        self.app = app
 
         self.setWindowTitle("RSS Feed")
         self.setFixedSize(QSize(width, height))
-        # self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
 
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
 
-        # self.title_bar = TitleBar(self)
-        # self.layout.addWidget(self.title_bar)
-
-        self.content = ContentWidget(self.feeds, self)
+        self.content = ContentWidget(self.app.manager.get_entries(), self)
+        self.refresh()
         self.layout.addWidget(self.content)
         self.setCentralWidget(self.content)
 
@@ -76,28 +73,12 @@ class AppWindow(QMainWindow):
         self.dialog.submitted_url.connect(self.add_rss)
 
     def add_rss(self, url: str):
-        try:
-            self.db.create_feed(url)
-            self.refresh()
-        except ValueError as err:
-            print(f"Error: {err}")
+        self.app.manager.add_feed_to_db(url)
+        self.refresh()
 
     def refresh(self):
-        urls = self.db.retrieve_all_feeds()
-        existing = [feed.url for feed in self.feeds]
-        feeds = []
-
-        for url in urls:
-            if url in existing:
-                _ = self.feeds[existing.index(url)]
-                _.refresh()
-                feeds.append(_)
-            else:
-                feeds.append(Feed(url))
-
-        self.feeds = [feed for feed in feeds]
-
-        self.content.update_content(self.feeds)
+        self.app.manager.update_feeds()
+        self.content.update_content(self.app.manager.get_entries())
 
 
 class TitleBar(QWidget):
@@ -181,50 +162,40 @@ class UrlDialog(QDialog):
 
 
 class ContentWidget(QScrollArea):
-    def __init__(self, feeds: list[Feed], parent=None):
+    def __init__(self, entries: list[Entry], parent=None):
         super().__init__(parent)
         self.setObjectName("ContentWidget")
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
 
         self.layout = QVBoxLayout()
 
         self.widget = QWidget()
         self.widget.setObjectName("ContentWidget")
         self.widget.setLayout(self.layout)
+        self.setWidget(self.widget)
+        self.setWidgetResizable(True)
 
         self.content = []
-        self.update_content(feeds)
+        self.update_content(entries)
 
-        self.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOn
-        )
-        self.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-        )
-        self.setWidgetResizable(True)
-        self.setWidget(self.widget)
-
-    def update_content(self, feeds: list[Feed]):
-        for widget in self.content:
-            self.layout.removeWidget(widget)
-
-        for feed in feeds:
-            for entry in feed.entries:
-                if entry.id not in map(
-                        lambda item: item.id, self.content
-                ):
-                    entry_widget = EntryFrame(entry, self)
-                    self.content.insert(0, entry_widget)
-
-        for widget in self.content:
-            self.layout.addWidget(widget)
+    def update_content(self, entries: list[Entry]):
+        ids = [entry.id for entry in self.content]
+        for i in range(len(entries)):
+            if entries[i].id not in ids:
+                entry_widget = EntryFrame(entries[i], self)
+                self.content.append(entry_widget)
+                self.layout.insertWidget(i, entry_widget)
 
 
 class EntryFrame(QFrame):
     def __init__(self, entry: Entry = None, parent=None):
         super().__init__(parent)
 
-        self.entry = entry
         self.id = entry.id
+        self.url = entry.url
 
         self.setObjectName("Entry")
 
@@ -260,7 +231,7 @@ class EntryFrame(QFrame):
         self.description_label = QLabel()
         self.description_label.setObjectName("EntryDescriptionLabel")
         self.description_label.setText(
-            self.entry.description if entry else "No Description"
+            entry.description if entry else "No Description"
         )
         self.description_label.setWordWrap(True)
         self.expand_flag = False
@@ -275,4 +246,4 @@ class EntryFrame(QFrame):
 
     def open_link(self):
         wb = webbrowser.get()
-        wb.open_new_tab(self.entry.url)
+        wb.open_new_tab(self.url)
