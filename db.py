@@ -3,8 +3,6 @@ from __future__ import annotations
 import sqlite3
 from validators import url as url_validator
 
-from feed import Feed
-
 
 class DBManager:
     DB_PATH = "db/app_db.sqlite"
@@ -79,9 +77,9 @@ class DBManager:
             ).fetchone()
             return query(0) if query else None
 
-    def retrieve_all_feeds(self) -> list[Feed]:
+    def retrieve_all_feeds(self) -> list[str]:
         return [
-            Feed(row["url"])
+            row["url"]
             for row in self.conn.execute(
                 "SELECT url FROM feeds"
             ).fetchall()
@@ -95,7 +93,7 @@ class DBManager:
             ).fetchall()
         ]
 
-    def retrieve_folder(self, folder: str) -> list[Feed]:
+    def retrieve_folder(self, folder: str) -> list[str]:
         if not isinstance(folder, str):
             raise TypeError("Folder name must be a string.")
         elif not self.find_folder(folder):
@@ -113,7 +111,7 @@ class DBManager:
                 """,
                 (folder, )
             ).fetchall()
-            return [Feed(row["url"]) for row in urls_rows]
+            return [row["url"] for row in urls_rows]
 
     def add_to_folder(self, url: str, folder: str) -> None:
         self.cursor.execute(
