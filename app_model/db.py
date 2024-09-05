@@ -3,12 +3,12 @@ from __future__ import annotations
 import sqlite3
 from validators import url as url_validator
 
+from config import DB_PATH
+
 
 class DBManager:
-    DB_PATH = "db/app_db.sqlite"
-
     def __init__(self):
-        self.conn = sqlite3.connect(self.DB_PATH)
+        self.conn = sqlite3.connect(DB_PATH)
         self.cursor = self.conn.cursor()
         self.conn.row_factory = sqlite3.Row
 
@@ -75,7 +75,7 @@ class DBManager:
                 "SELECT pk FROM folders WHERE name = ?",
                 (name, )
             ).fetchone()
-            return query(0) if query else None
+            return query[0] if query else None
 
     def retrieve_all_feeds(self) -> list[str]:
         return [
@@ -109,7 +109,7 @@ class DBManager:
                     ON ff.feed_fk = f.pk
                     WHERE folder_fk = ?
                 """,
-                (folder, )
+                (self.find_folder(folder), )
             ).fetchall()
             return [row["url"] for row in urls_rows]
 

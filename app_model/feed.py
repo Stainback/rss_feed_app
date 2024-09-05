@@ -11,20 +11,19 @@ for tag in ("a", "img"):
 
 class Entry:
     def __init__(self, entry):
-        self.id = hash(entry.title + entry.published)
+        self.id = hash(entry.title)
         self.title = entry.title
         self.url = entry.link
         self.description = " ".join(entry.description.split()[:150])
-        self.published = entry.published
-        self.published_date = datetime.fromtimestamp(
+        self.published = datetime.utcfromtimestamp(
             mktime(entry.published_parsed)
         )
 
     def __str__(self):
-        return f"{self.title} - {self.published}"
+        return f"{self.title} - {self.published.isoformat()}"
 
     def __repr__(self):
-        return self.id
+        return str(self.id)
 
     def __eq__(self, other: "Entry"):
         if not isinstance(other, Entry):
@@ -35,17 +34,14 @@ class Entry:
 class Feed:
     def __init__(self, url):
         self.url = url
-        self.feed = None
+        self.title = None
         self.etag = None
         self.modified = None
         self.entries = None
         self.refresh()
 
-        # Debug
-        print(f"{self.url} - feed created, {self.etag} / {self.modified}, {self.feed.status}")
-
     def __repr__(self) -> str:
-        return self.feed.get("title", "No Title")
+        return self.title
 
     def __eq__(self, other: "Feed") -> bool:
         if not isinstance(other, Feed):
@@ -56,20 +52,12 @@ class Feed:
         return self.entries[index]
 
     def refresh(self):
-        self.feed = feedparser.parse(
+        feed = feedparser.parse(
             self.url, etag=self.etag, modified=self.modified
         )
-        self.etag = self.feed.get("etag")
-        self.modified = self.feed.get("modified")
+        self.title = feed.get("title", "No Title")
+        self.etag = feed.get("etag")
+        self.modified = feed.get("modified")
 
-        if self.feed.status != 304:
-            # Debug
-            if self.entries:
-                titles = [entry.title for entry in self.entries]
-                for entry in self.feed["entries"]:
-                    if entry.title not in titles:
-                        print(
-                            f"New entry: {entry.title} - {entry.published}"
-                        )
-
-            self.entries = [Entry(data) for data in self.feed["entries"]]
+        if feed.status != 304:
+            self.entries = [Entry(data) for data in feed["entries"]]
